@@ -37,9 +37,10 @@ $VERSION = '0.1';
 # TODO:
 # - bind window commands (move, goto) to make them group-aware
 # - add settings to statically assign groups
-# - add a window switcher command (/ws name|id|regex, scope: group)
 # - get real ctrl+n/ctrl+p bindings from irssi
 # - display a window list
+
+no warnings 'experimental::smartmatch';
 
 use constant {
 	PREV	=> 0,
@@ -155,7 +156,38 @@ sub cmd_group_goto {
 
 	$active_g = $group;
 	$active_w = 0;
-};
+}
+
+sub find_window {
+	my $search = shift;
+	my $regex = qr/^(.*?)(\Q$search\E)(.*?)$/i;
+	my $current = Irssi::active_win();
+
+	foreach my $w (Irssi::windows()) {
+		if ($w->{refnum} ~~ @{$windows{$active_g}}) {
+			if ($w->{refnum} == $search) { return $search; }
+
+			# TODO: get the best match, not the first one.
+			if ($w->{name} =~ $regex) {
+				return $w->{refnum};
+			}
+
+			# TODO: get the best match, not the first one.
+			my @items = $w->items();
+			if ($items[0]->{visible_name} =~ $regex) {
+				return $w->{refnum};
+			}
+		}
+	}
+
+	return $current->{refnum};
+}
+
+sub cmd_ws {
+	my $refnum = find_window(shift);
+	Irssi::command('window goto ' . $refnum);
+	$active_w = $refnum;
+}
 
 Irssi::command_bind('group', sub {
 	my ( $data, $server, $item ) = @_;
@@ -173,3 +205,5 @@ Irssi::command_bind('group assign', 'cmd_group_assign');
 Irssi::command_set_options('group assign', '+name');
 Irssi::command_bind('group goto', 'cmd_group_goto');
 Irssi::command_set_options('group goto', '+name');
+Irssi::command_bind('ws', 'cmd_ws');
+Irssi::command_set_options('ws', '+');
