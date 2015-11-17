@@ -35,11 +35,10 @@ $VERSION = '0.1';
 # FIXME
 
 # TODO:
-# - keep the status window in all groups
 # - bind window commands (move, goto) to make them group-aware
 # - add settings to statically assign groups
 # - add a window switcher command (/ws name|id|regex, scope: group)
-# - get real ctrl+n/ctrl+v bindings from irssi
+# - get real ctrl+n/ctrl+p bindings from irssi
 # - display a window list
 
 use constant {
@@ -47,25 +46,30 @@ use constant {
 	NEXT	=> 1,
 };
 
-my @windows = ();
+my %windows = [];
+my $active_g = 'default';
 my $active_w = undef;
 
-sub refresh_window_list {
-	my $index = 0;
+sub window_list {
 	my $current = Irssi::active_win();
 
-	@windows = ();
+	%windows = [];
 	foreach my $w (Irssi::windows()) {
-		push @windows, $w->{refnum};
+		push @{$windows{'default'}}, $w->{refnum};
 
 		if ($current->{refnum} == $w->{refnum}) {
-			$active_w = $index;
+			$active_w = $#{@windows{'default'}};
 		}
-		$index++;
 	}
 }
 
-sub change_window {
+sub get_window_count {
+	return keys %{Irssi::windows()};
+}
+
+window_list();
+
+sub goto_window {
 	my $index = undef;
 	my $dir = shift;
 	if ($dir != PREV && $dir != NEXT) {
@@ -75,33 +79,97 @@ sub change_window {
 	$index = $active_w;
 	$index += ($dir == PREV) ? -1 : 1;
 	if ($index < 0) {
-		$index = $#windows;
-	} elsif ($index > $#windows) {
+		$index = $#{@windows{$active_g}};
+	} elsif ($index > $#{@windows{$active_g}}) {
 		$index = 0;
 	}
 
-	Irssi::command('window goto ' . $windows[$index]);
+	Irssi::command('window goto ' . $windows{$active_g}[$index]);
 	$active_w = $index;
 }
 
-sub sig_window {
-	refresh_window_list($@);
+sub sig_window_created {
+	my $w = shift;
+	my $refnum = defined($w->{refnum}) ? $w->{refnum} : get_window_count();
+
+	push @{$windows{'default'}}, $refnum;
+}
+
+sub sig_window_destroyed {
+	my $w = shift;
+	foreach my $key (keys %windows) {
+		if (defined(@windows{$key})) {
+			my $index = 0;
+			$index++ until ${@windows{$key}}[$index] == $w->{refnum};
+			splice(@{$windows{$key}}, $index, 1);
+		}
+	}
 }
 
 sub sig_key {
 	my $key = shift;
 	if ($key == 14)	{		# ctrl+n
 		Irssi::signal_stop();
-		change_window(NEXT);
+		goto_window(NEXT);
 	} elsif ($key == 16) {		# ctrl+p
 		Irssi::signal_stop();
-		change_window(PREV);
+		goto_window(PREV);
 	}
 }
 
-refresh_window_list();
+Irssi::signal_add({
+	'window created'	=> 'sig_window_created',
+	'window destroyed'	=> 'sig_window_destroyed',
+});
+Irssi::signal_add_first('gui key pressed', 'sig_key');
 
-Irssi::signal_add('window created', 'sig_window');
-Irssi::signal_add('window destroyed', 'sig_window');
-Irssi::signal_add('window refnum changed', 'sig_window');
-Irssi::signal_add('gui key pressed', 'sig_key');
+sub cmd_group_assign {
+	my $group = shift;
+	if (!defined($group)) { return; }
+
+	my $current = Irssi::active_win();
+	if ($current->{refnum} == 1) { return; }
+
+	my $index = 0;
+	$index++ until ${@windows{$active_g}}[$index] == $current->{refnum};
+	splice(@{$windows{$active_g}}, $index, 1);
+
+	if (!defined($windows{$group})) {
+		push @{$windows{$group}}, 1;
+	}
+	push @{$windows{$group}}, $current->{refnum};
+
+	$active_g = $group;
+	$active_w = $#{@windows{$group}};
+}
+
+sub cmd_group_goto {
+	my $group = shift;
+	if (!defined($group)) { return; }
+	if (!defined($windows{$group})) {
+		print 'Undefined group';
+		return;
+	}
+
+	Irssi::command('window goto ' . $windows{$group}[0]);
+
+	$active_g = $group;
+	$active_w = 0;
+};
+
+Irssi::command_bind('group', sub {
+	my ( $data, $server, $item ) = @_;
+	$data =~ s/\s+$//g;
+	Irssi::command_runsub ('group', $data, $server, $item);
+});
+Irssi::signal_add_first('default command group', sub {
+	print (<<EOF
+Usage:
+  group assign <name>   - Assign the current window to the group <name>.
+  group goto <name>     - Use <name> as the current group.
+EOF
+);});
+Irssi::command_bind('group assign', 'cmd_group_assign');
+Irssi::command_set_options('group assign', '+name');
+Irssi::command_bind('group goto', 'cmd_group_goto');
+Irssi::command_set_options('group goto', '+name');
