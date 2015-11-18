@@ -41,7 +41,6 @@ $VERSION = '0.1';
 #				- Match a window by its name or id and goto it.
 
 # TODO:
-# - bind window window move and goto commands to make them group-aware
 # - add a parameter to the /ws command to change group at the same time
 # - add settings to statically assign groups
 # - get real ctrl+n/ctrl+p bindings from irssi
@@ -65,6 +64,11 @@ sub window_list {
 
 sub group_list {
 	return sort keys %windows;
+}
+
+sub window_goto {
+	my $w = Irssi::window_find_refnum(shift);
+	$w->set_active();
 }
 
 sub init_windows {
@@ -103,7 +107,7 @@ sub goto_window {
 		$index = 0;
 	}
 
-	Irssi::command('window goto ' . $windows{$active_g}[$index]);
+	window_goto($windows{$active_g}[$index]);
 	$active_w = $index;
 }
 
@@ -173,7 +177,7 @@ sub cmd_group_goto {
 		return;
 	}
 
-	Irssi::command('window goto ' . $windows{$group}[0]);
+	window_goto($windows{$group}[0]);
 
 	$active_g = $group;
 	$active_w = 0;
@@ -208,8 +212,29 @@ sub find_window {
 
 sub cmd_ws {
 	my $refnum = find_window(shift);
-	Irssi::command('window goto ' . $refnum);
+	window_goto($refnum);
 	$active_w = $refnum;
+}
+
+sub cmd_window {
+	my ( $data, $server, $item ) = @_;
+	$data =~ s/\s+$//g;
+
+	Irssi::signal_stop();
+
+	if ($data =~ /^\d+$/) {
+		cmd_window_goto($data);
+		return;
+	}
+	Irssi::command_runsub ('window', $data, $server, $item);
+}
+
+sub cmd_window_goto {
+	my $n = (shift) - 1;
+
+	Irssi::signal_stop();
+	window_goto($windows{$active_g}[$n]);
+	$active_w = $n;
 }
 
 Irssi::command_bind('group', sub {
@@ -230,6 +255,8 @@ Irssi::command_bind('group goto', 'cmd_group_goto');
 Irssi::command_set_options('group goto', '+name');
 Irssi::command_bind('ws', 'cmd_ws');
 Irssi::command_set_options('ws', '+');
+Irssi::command_bind('window', 'cmd_window');
+Irssi::command_bind('window goto', 'cmd_window_goto');
 
 sub group_windows_bar_handler {
 	my ($sb_item, $get_size_only) = @_;
@@ -238,15 +265,17 @@ sub group_windows_bar_handler {
 	foreach my $group (group_list()) {
 		if (!defined(@windows{$group})) { next; }
 		my $n = 0;
+		my $i = 0;
 		my $tmp = '';
 
-		$sb .= '[' . ($group eq $active_g ? '»' : '') . $group;
+		$sb .= '[' . ($group eq $active_g ? '» ' : '') . $group;
 		foreach my $w (window_list()) {
 			if ($w->{refnum} ~~ @{$windows{$group}}) {
+				$i++;
 				if ($w->{data_level} < 2) { next; }
 
 				my @items = $w->items();
-				$tmp .= ': %9';
+				$tmp .= " ($i)%9";
 				if ($w->{data_level} == 3) {
 					$tmp .= '%m';
 				} elsif ($w->{data_level} > 3) {
@@ -259,7 +288,7 @@ sub group_windows_bar_handler {
 			}
 		}
 		if ($n) {
-			$sb .= $tmp;
+			$sb .= ":$tmp";
 		}
 		$sb .= '] ';
 	}
