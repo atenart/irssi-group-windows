@@ -41,10 +41,11 @@ $VERSION = '0.1';
 #				- Match a window by its name or id and goto it.
 
 # TODO:
-# - bind window commands (move, goto) to make them group-aware
+# - bind window window move and goto commands to make them group-aware
+# - add a parameter to the /ws command to change group at the same time
 # - add settings to statically assign groups
 # - get real ctrl+n/ctrl+p bindings from irssi
-# - display a window list
+# - fix query handling: always in default group + do not update $current_w / _g
 
 no warnings 'experimental::smartmatch';
 
@@ -232,20 +233,35 @@ Irssi::command_set_options('ws', '+');
 
 sub group_windows_bar_handler {
 	my ($sb_item, $get_size_only) = @_;
-	my $sb = '';
+	my $sb = ' ';
 
 	foreach my $group (group_list()) {
 		if (!defined(@windows{$group})) { next; }
-		$sb .= '[' . ($group eq $active_g ? '»' : '') . $group . ':';
+		my $n = 0;
+		my $tmp = '';
+
+		$sb .= '[' . ($group eq $active_g ? '»' : '') . $group;
 		foreach my $w (window_list()) {
-				if ($w->{refnum} ~~ @{$windows{$group}}) {
+			if ($w->{refnum} ~~ @{$windows{$group}}) {
+				if ($w->{data_level} < 2) { next; }
+
 				my @items = $w->items();
-				$sb .= ' ';
-				$sb .= ($w->{name} ne '') ?
-					$w->{name} : $items[0]->{visible_name};
+				$tmp .= ': %9';
+				if ($w->{data_level} == 3) {
+					$tmp .= '%m';
+				} elsif ($w->{data_level} > 3) {
+					$tmp .= '%r';
+				}
+				$tmp .= ($w->{name} ne '') ?
+					 $w->{name} : $items[0]->{visible_name};
+				$tmp .= '%n';
+				$n++;
 			}
 		}
-		$sb .= '] '
+		if ($n) {
+			$sb .= $tmp;
+		}
+		$sb .= '] ';
 	}
 
 	$sb_item->default_handler($get_size_only, "{sb $sb}", '', 0);
@@ -263,6 +279,7 @@ Irssi::statusbar_item_register('group_windows_bar', 0, 'group_windows_bar_handle
 Irssi::signal_add_last({
 	'window changed'		=> 'sig_window_changed',
 	'window changed automatic'	=> 'sig_window_changed',
+	'print text'			=> 'sig_window_changed',
 	'group changed'			=> 'sig_window_changed',
 });
 Irssi::signal_register({ 'group changed' => [] });
