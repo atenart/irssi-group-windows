@@ -16,6 +16,7 @@
 #  02110-1301, USA.
 
 use Irssi;
+use Irssi::TextUI;
 use strict;
 use vars qw($VERSION %IRSSI);
 
@@ -57,23 +58,34 @@ my $active_g = 'default';
 my $active_w = undef;
 
 sub window_list {
+	my @ws = Irssi::windows();
+	return sort { $a->{refnum} <=> $b->{refnum}  } @ws;
+}
+
+sub group_list {
+	return sort keys %windows;
+}
+
+sub init_windows {
 	my $current = Irssi::active_win();
 
 	%windows = [];
-	foreach my $w (Irssi::windows()) {
+	foreach my $w (window_list()) {
 		push @{$windows{'default'}}, $w->{refnum};
 
 		if ($current->{refnum} == $w->{refnum}) {
 			$active_w = $#{@windows{'default'}};
 		}
 	}
+
+	@windows{'default'}.sort();
 }
 
 sub get_window_count {
 	return keys %{Irssi::windows()};
 }
 
-window_list();
+init_windows();
 
 sub goto_window {
 	my $index = undef;
@@ -98,12 +110,13 @@ sub sig_window_created {
 	my $w = shift;
 	my $refnum = defined($w->{refnum}) ? $w->{refnum} : get_window_count();
 
-	push @{$windows{'default'}}, $refnum;
+	push @{$windows{$active_g}}, $refnum;
+	$active_w = $#{@windows{$active_g}};
 }
 
 sub sig_window_destroyed {
 	my $w = shift;
-	foreach my $key (keys %windows) {
+	foreach my $key (group_list()) {
 		if (defined(@windows{$key})) {
 			my $index = 0;
 			$index++ until ${@windows{$key}}[$index] == $w->{refnum};
@@ -147,6 +160,8 @@ sub cmd_group_assign {
 
 	$active_g = $group;
 	$active_w = $#{@windows{$group}};
+
+	Irssi::signal_emit('group changed');
 }
 
 sub cmd_group_goto {
@@ -161,6 +176,8 @@ sub cmd_group_goto {
 
 	$active_g = $group;
 	$active_w = 0;
+
+	Irssi::signal_emit('group changed');
 }
 
 sub find_window {
@@ -168,7 +185,7 @@ sub find_window {
 	my $regex = qr/^(.*?)(\Q$search\E)(.*?)$/i;
 	my $current = Irssi::active_win();
 
-	foreach my $w (Irssi::windows()) {
+	foreach my $w (window_list()) {
 		if ($w->{refnum} ~~ @{$windows{$active_g}}) {
 			if ($w->{refnum} == $search) { return $search; }
 
@@ -212,3 +229,41 @@ Irssi::command_bind('group goto', 'cmd_group_goto');
 Irssi::command_set_options('group goto', '+name');
 Irssi::command_bind('ws', 'cmd_ws');
 Irssi::command_set_options('ws', '+');
+
+sub group_windows_bar_handler {
+	my ($sb_item, $get_size_only) = @_;
+	my $sb = '';
+
+	foreach my $group (group_list()) {
+		if (!defined(@windows{$group})) { next; }
+		$sb .= '[' . ($group eq $active_g ? '»' : '') . $group . ':';
+		foreach my $w (window_list()) {
+				if ($w->{refnum} ~~ @{$windows{$group}}) {
+				my @items = $w->items();
+				$sb .= ' ';
+				$sb .= ($w->{name} ne '') ?
+					$w->{name} : $items[0]->{visible_name};
+			}
+		}
+		$sb .= '] '
+	}
+
+	$sb_item->default_handler($get_size_only, "{sb $sb}", '', 0);
+}
+
+sub init_statusbar {
+	Irssi::command('statusbar gw0 reset');
+	Irssi::command('statusbar gw0 enable');
+	Irssi::command('statusbar gw0 add -alignment left group_windows_bar');
+}
+
+sub sig_window_changed { init_statusbar(); }
+
+Irssi::statusbar_item_register('group_windows_bar', 0, 'group_windows_bar_handler');
+Irssi::signal_add_last({
+	'window changed'		=> 'sig_window_changed',
+	'window changed automatic'	=> 'sig_window_changed',
+	'group changed'			=> 'sig_window_changed',
+});
+Irssi::signal_register({ 'group changed' => [] });
+init_statusbar();
