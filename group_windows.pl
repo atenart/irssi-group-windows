@@ -36,7 +36,7 @@ $VERSION = '0.1';
 # Usage:
 # 
 # /group assign <group>		- Assign the current window to <group>.
-# /group goto <group>		- Change the contexte to use <group>.
+# /group goto <group>		- Change the context to use <group>.
 # /ws [window number|part of window name]
 #				- Match a window by its name or id and goto it.
 
