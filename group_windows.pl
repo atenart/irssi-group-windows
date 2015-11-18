@@ -41,7 +41,6 @@ $VERSION = '0.1';
 #				- Match a window by its name or id and goto it.
 
 # TODO:
-# - add a parameter to the /ws command to change group at the same time
 # - add settings to statically assign groups
 # - get real ctrl+n/ctrl+p bindings from irssi
 
@@ -192,11 +191,16 @@ sub cmd_group_goto {
 
 sub find_window {
 	my $search = shift;
+	my $group = shift;
 	my $regex = qr/^(.*?)(\Q$search\E)(.*?)$/i;
 	my $current = Irssi::active_win();
+	my $found = 0;
+
+	foreach my $a (group_list()) { if ($a eq $group) { $found = 1; last; }	}
+	if (!$found) { return -1; }
 
 	foreach my $w (window_list()) {
-		if ($w->{refnum} ~~ @{$windows{$active_g}}) {
+		if ($w->{refnum} ~~ @{$windows{$group}}) {
 			if ($w->{refnum} == $search) { return $search; }
 
 			# TODO: get the best match, not the first one.
@@ -212,16 +216,24 @@ sub find_window {
 		}
 	}
 
-	return $current->{refnum};
+	return -1;
 }
 
 sub cmd_ws {
-	my $refnum = find_window(shift);
-	my $index = 0;
-	window_goto($refnum);
+	my @args = split / /, shift;
 
-	$index++ until $windows{$active_g}[$index] == $refnum;
+	my $group = $active_g;
+	if ($#args >= 1) { $group = $args[1]; }
+
+	my $refnum = find_window($args[0], $group);
+	if ($refnum == -1) { return; }
+
+	my $index = 0;
+	$index++ until $windows{$group}[$index] == $refnum;
+
+	window_goto($windows{$group}[$index]);
 	$active_w = $index;
+	$active_g = $group;
 }
 
 sub cmd_window {
@@ -258,11 +270,8 @@ Usage:
 EOF
 );});
 Irssi::command_bind('group assign', 'cmd_group_assign');
-Irssi::command_set_options('group assign', '+name');
 Irssi::command_bind('group goto', 'cmd_group_goto');
-Irssi::command_set_options('group goto', '+name');
 Irssi::command_bind('ws', 'cmd_ws');
-Irssi::command_set_options('ws', '+');
 Irssi::command_bind('window', 'cmd_window');
 Irssi::command_bind('window goto', 'cmd_window_goto');
 
