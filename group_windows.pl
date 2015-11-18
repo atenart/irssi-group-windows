@@ -44,7 +44,6 @@ $VERSION = '0.1';
 # - add a parameter to the /ws command to change group at the same time
 # - add settings to statically assign groups
 # - get real ctrl+n/ctrl+p bindings from irssi
-# - fix query handling: always in default group + do not update $current_w / _g
 
 no warnings 'experimental::smartmatch';
 
@@ -92,7 +91,7 @@ sub get_window_count {
 
 init_windows();
 
-sub goto_window {
+sub cycle_window {
 	my $index = undef;
 	my $dir = shift;
 	if ($dir != PREV && $dir != NEXT) {
@@ -116,34 +115,40 @@ sub sig_window_created {
 	my $refnum = defined($w->{refnum}) ? $w->{refnum} : get_window_count();
 
 	push @{$windows{$active_g}}, $refnum;
-	$active_w = $#{@windows{$active_g}};
 }
 
 sub sig_window_destroyed {
 	my $w = shift;
 	foreach my $key (group_list()) {
-		if (defined(@windows{$key})) {
-			my $index = 0;
-			$index++ until ${@windows{$key}}[$index] == $w->{refnum};
-			splice(@{$windows{$key}}, $index, 1);
+		if (!defined(@windows{$key})) { next; }
+
+		my $index = 0;
+		$index++ until ${@windows{$key}}[$index] == $w->{refnum};
+		splice(@{$windows{$key}}, $index, 1);
+
+		for (; $index <= $#{@windows{$key}}; $index++) {
+			${@windows{$key}}[$index]--;
 		}
 	}
+
+	if ($#{@windows{$active_g}} < $active_w) { $active_w = 0; }
 }
 
 sub sig_key {
 	my $key = shift;
 	if ($key == 14)	{		# ctrl+n
 		Irssi::signal_stop();
-		goto_window(NEXT);
+		cycle_window(NEXT);
 	} elsif ($key == 16) {		# ctrl+p
 		Irssi::signal_stop();
-		goto_window(PREV);
+		cycle_window(PREV);
 	}
 }
 
 Irssi::signal_add({
 	'window created'	=> 'sig_window_created',
 	'window destroyed'	=> 'sig_window_destroyed',
+	'channel created'	=> sub { $active_w = $#{@windows{$active_g}} + 1; },
 });
 Irssi::signal_add_first('gui key pressed', 'sig_key');
 
@@ -212,8 +217,11 @@ sub find_window {
 
 sub cmd_ws {
 	my $refnum = find_window(shift);
+	my $index = 0;
 	window_goto($refnum);
-	$active_w = $refnum;
+
+	$index++ until $windows{$active_g}[$index] == $refnum;
+	$active_w = $index;
 }
 
 sub cmd_window {
