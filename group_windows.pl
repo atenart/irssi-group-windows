@@ -126,10 +126,17 @@ sub sig_window_destroyed {
 
 		if (${@windows{$key}}[$index] == $w->{refnum}) {
 			splice(@{$windows{$key}}, $index, 1);
-		}
 
-		for (; $index <= $#{@windows{$key}}; $index++) {
-			${@windows{$key}}[$index]--;
+			for (; $index <= $#{@windows{$key}}; $index++) {
+				${@windows{$key}}[$index]--;
+			}
+
+			if ($#{@windows{$key}} == 0) {
+				@windows{$key} = undef;
+				window_goto($windows{'default'}[0]);
+				$active_w = 0;
+				$active_g = 'default';
+			}
 		}
 	}
 
