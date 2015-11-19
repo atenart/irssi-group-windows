@@ -122,8 +122,11 @@ sub sig_window_destroyed {
 		if (!defined(@windows{$key})) { next; }
 
 		my $index = 0;
-		$index++ until ${@windows{$key}}[$index] == $w->{refnum};
-		splice(@{$windows{$key}}, $index, 1);
+		$index++ until $index == $#{@windows{$key}} or ${@windows{$key}}[$index] == $w->{refnum};
+
+		if (${@windows{$key}}[$index] == $w->{refnum}) {
+			splice(@{$windows{$key}}, $index, 1);
+		}
 
 		for (; $index <= $#{@windows{$key}}; $index++) {
 			${@windows{$key}}[$index]--;
