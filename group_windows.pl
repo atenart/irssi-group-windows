@@ -26,7 +26,7 @@ $VERSION = '0.1';
 	description	=> 'organize windows in groups, and navigate through them',
 	authors		=> 'Antoine Tenart <antoine.tenart@ack.tf>',
 	license		=> 'GPL v2',
-	url		=> 'http://github.com/atenart/group_windows',
+	url		=> 'http://github.com/atenart/irssi-group-windows',
 );
 
 # group_windows irssi module
