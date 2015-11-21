@@ -44,8 +44,6 @@ $VERSION = '0.1';
 # - add settings to statically assign groups
 # - get real ctrl+n/ctrl+p bindings from irssi
 
-no warnings 'experimental::smartmatch';
-
 use constant {
 	PREV	=> 0,
 	NEXT	=> 1,
@@ -210,6 +208,7 @@ sub find_window {
 	if (!$found) { return -1; }
 
 	foreach my $w (window_list()) {
+		no warnings 'experimental::smartmatch';
 		if ($w->{refnum} ~~ @{$windows{$group}}) {
 			if ($w->{refnum} == $search) { return $search; }
 
@@ -297,9 +296,11 @@ sub group_windows_bar_handler {
 
 		$sb .= '[' . ($group eq $active_g ? '» ' : '') . $group;
 		foreach my $w (window_list()) {
+			no warnings 'experimental::smartmatch';
 			if ($w->{refnum} ~~ @{$windows{$group}}) {
 				$i++;
 				if ($w->{data_level} < 2) { next; }
+				if ($group != $active_g and $w->{data_level} == 2) { next; }
 
 				my @items = $w->items();
 				$tmp .= " ($i)%9";
